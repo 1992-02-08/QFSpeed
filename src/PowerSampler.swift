@@ -12,6 +12,7 @@ import Darwin
 enum PowerSampler {
 
     struct Reading {
+        var voltage: Double? = nil     // mV
         var current: Double? = nil     // mA，绝对值
         var watt: Double? = nil        // W
         var temperature: Double? = nil // °C
@@ -107,8 +108,8 @@ enum PowerSampler {
             out.current = abs(amp)
         }
         let volt = num("Voltage")   // mV
-        if let mA = out.current {
-            let mV = volt ?? 3850
+        out.voltage = volt
+        if let mA = out.current, let mV = volt {
             out.watt = mA / 1000.0 * (mV / 1000.0)
         }
 
