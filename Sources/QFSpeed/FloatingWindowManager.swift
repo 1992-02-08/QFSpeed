@@ -1,0 +1,318 @@
+import UIKit
+import SwiftUI
+import Combine
+
+// MARK: - 布局状态
+
+/// 唯一的「悬浮条在哪」真相来源。
+/// 之前 manager 和 SwiftUI 各自算一遍坐标，一贴边就打架；现在只在这里算。
+final class OverlayLayout: ObservableObject {
+    /// 悬浮条中心点（window 坐标）
+    @Published var barCenter: CGPoint = .zero
+    /// 贴边隐藏时露出的那一侧，用于渲染把手
+    @Published var peekSide: PeekSide = .none
+    /// 窗口尺寸。currentBounds 是计算属性，SwiftUI 观察不到，
+    /// 所以另存一份 @Published 的，供 onChange 使用。
+    @Published var bounds: CGSize = .zero
+
+    enum PeekSide { case none, left, right }
+}
+
+// MARK: - 穿透式窗口
+
+/// 关键：只有真正画了内容的区域吃触摸，空白区必须放行给底下的宿主 App。
+/// 少了这个，一个铺满全屏的 window 会吞掉宿主所有点击 —— 注入类浮窗最常见的翻车点。
+///
+/// 为什么不用「hit.test 结果是不是 hosting view」来判断：
+/// SwiftUI 的 `_UIHostingView` 对命中处理是内部实现，不同系统版本行为不一致，
+/// 用它会出现在某些版本上整条悬浮条点不动、或者反过来全屏吞触摸。
+/// 所以这里改成**显式的交互区域**：bar 的 frame，或者面板展开时的整屏。
+final class PassThroughWindow: UIWindow {
+
+    /// 当前允许吃触摸的区域（window 坐标）
+    var interactiveRegions: [CGRect] = []
+    /// 面板展开时整屏都可交互（点空白处关闭）
+    var fullScreenInteractive: Bool = false
+
+    /// bounds 变化（首次布局 / 旋转 / 分屏）时回调
+    var onLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if fullScreenInteractive {
+            return super.hitTest(point, with: event)
+        }
+        // 留 6pt 余量，手指按在边缘也能抓住
+        let margin: CGFloat = 6
+        let inside = interactiveRegions.contains { $0.insetBy(dx: -margin, dy: -margin).contains(point) }
+        guard inside else { return nil }
+        return super.hitTest(point, with: event)
+    }
+}
+
+// MARK: - 托管控制器
+
+final class OverlayHostController: UIHostingController<OverlayRootView> {
+
+    convenience init(store: SettingsStore,
+                     provider: MetricsProvider,
+                     layout: OverlayLayout) {
+        self.init(rootView: OverlayRootView(store: store, layout: layout, provider: provider))
+        view.backgroundColor = .clear
+        view.isOpaque = false
+    }
+}
+
+// MARK: - Window 管理器
+
+/// 负责 window 的创建 / 显隐 / 定位 / 吸附 / 贴边。
+/// **不含手势** —— 拖动和点击都在 SwiftUI 层用 DragGesture / onTapGesture 处理，
+/// 避免 UIKit 手势与 SwiftUI hitTest 互相抢事件。
+final class FloatingWindowManager {
+
+    static let shared = FloatingWindowManager()
+
+    let layout = OverlayLayout()
+
+    private var window: PassThroughWindow?
+    private var host: OverlayHostController?
+    private let store = SettingsStore.shared
+    private let provider = MetricsProvider()
+
+    /// 悬浮条实际尺寸（SwiftUI 回报）
+    private(set) var barSize: CGSize = CGSize(width: 320, height: 26)
+    /// 贴边后露出的宽度
+    let edgePeek: CGFloat = 7
+    /// 吸附阈值
+    let snapDistance: CGFloat = 14
+
+    private init() {}
+
+    // MARK: 生命周期
+
+    func show() {
+        guard let scene = activeScene() else { return }
+        if window == nil { buildWindow(scene: scene) }
+        window?.isHidden = false
+        store.isVisible = true
+        layout.peekSide = .none
+        provider.start()
+        relayout()
+        syncHitRegion()
+    }
+
+    func hide() {
+        store.isVisible = false
+        window?.isHidden = true
+        provider.stop()
+        syncHitRegion()
+    }
+
+    func toggle() {
+        store.isVisible ? hide() : show()
+    }
+
+    /// UIWindowScene 激活后补挂一次（注入模式下宿主可能迟迟不 active）
+    func showIfActive() {
+        guard window == nil, activeScene() != nil else { return }
+        show()
+    }
+
+    private func activeScene() -> UIWindowScene? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+    }
+
+    private func buildWindow(scene: UIWindowScene) {
+        let w = PassThroughWindow(windowScene: scene)
+        // Alert+1 能压住宿主的弹窗与键盘，又不会盖住系统权限框。
+        // 盖过权限框 = 用户点不到「允许」，等于自己把 App 弄死。
+        w.windowLevel = .alert + 1
+        w.backgroundColor = .clear
+        w.isOpaque = false
+
+        let controller = OverlayHostController(store: store, provider: provider, layout: layout)
+        w.rootViewController = controller
+        w.isHidden = false
+
+        w.onLayout = { [weak self] in
+            guard let self else { return }
+            self.layout.bounds = w.bounds.size
+            self.relayout()
+            self.syncHitRegion()
+        }
+
+        host = controller
+        window = w
+        relayout()
+        syncHitRegion()
+    }
+
+    // MARK: 定位
+
+    /// 当前 window 尺寸。SwiftUI 侧不要用自己的 geo.size ——
+    /// 一旦它与 window.bounds 有偏差（安全区 / 分屏），归一化锚点就会漂。
+    var currentBounds: CGSize {
+        window?.bounds.size ?? .zero
+    }
+
+    /// 悬浮条 frame（window 坐标）
+    var barFrame: CGRect {
+        let size = barSize
+        return CGRect(
+            x: layout.barCenter.x - size.width / 2,
+            y: layout.barCenter.y - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    /// 按 store.anchor + peekSide 重算 layout.barCenter
+    func relayout() {
+        guard let window else { return }
+        let b = window.bounds
+        guard b.width > 0, b.height > 0 else { return }
+
+        let size = barSize
+        var cx: CGFloat
+        var cy = b.height * store.anchor.y
+
+        switch layout.peekSide {
+        case .left:
+            cx = edgePeek - size.width / 2
+        case .right:
+            cx = b.width - edgePeek + size.width / 2
+        case .none:
+            cx = b.width * store.anchor.x
+        }
+
+        // 边界钳制：旋转 / 换设备后别把条卡在屏幕外
+        let halfW = size.width / 2
+        let halfH = size.height / 2
+        if layout.peekSide == .none {
+            cx = min(max(cx, halfW), b.width - halfW)
+        }
+        cy = min(max(cy, halfH), b.height - halfH)
+
+        let newCenter = CGPoint(x: cx, y: cy)
+        if newCenter != layout.barCenter {
+            layout.barCenter = newCenter
+        }
+        syncHitRegion()
+    }
+
+    /// 把 anchor 归一化（0...1），越界自动夹紧
+    func setAnchor(center: CGPoint, in bounds: CGSize) {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let nx = (center.x / bounds.width).clamped(to: 0...1)
+        let ny = (center.y / bounds.height).clamped(to: 0...1)
+        store.anchor = BarAnchor(x: nx, y: ny)
+        relayout()
+    }
+
+    // MARK: 吸附
+
+    /// 松手时吸附到最近的边缘（14pt 内）
+    func snap(in bounds: CGSize) {
+        guard bounds.width > 0 else { return }
+        let frame = barFrame
+        var cx = frame.midX
+        var cy = frame.midY
+
+        if frame.minX < snapDistance { cx = frame.width / 2 }
+        else if frame.maxX > bounds.width - snapDistance { cx = bounds.width - frame.width / 2 }
+
+        if frame.minY < snapDistance { cy = frame.height / 2 }
+        else if frame.maxY > bounds.height - snapDistance { cy = bounds.height - frame.height / 2 }
+
+        setAnchor(center: CGPoint(x: cx, y: cy), in: bounds)
+        maybePeek(in: bounds)
+    }
+
+    /// 贴边隐藏：只有紧贴左右边缘才半收
+    func maybePeek(in bounds: CGSize) {
+        guard store.edgeAutoHide else { return }
+        let frame = barFrame
+        if frame.minX <= 1 {
+            layout.peekSide = .left
+        } else if frame.maxX >= bounds.width - 1 {
+            layout.peekSide = .right
+        } else {
+            layout.peekSide = .none
+        }
+        relayout()
+    }
+
+    func unpeek() {
+        guard layout.peekSide != .none else { return }
+        layout.peekSide = .none
+        relayout()
+    }
+
+    // MARK: 面板按钮
+
+    func nudge(dx: CGFloat, dy: CGFloat, in bounds: CGSize) {
+        guard bounds.width > 0 else { return }
+        let frame = barFrame
+        setAnchor(center: CGPoint(x: frame.midX + dx, y: frame.midY + dy), in: bounds)
+    }
+
+    func resetPosition(in bounds: CGSize) {
+        layout.peekSide = .none
+        store.anchor = BarAnchor(x: 0.5, y: 0.20)
+        if bounds.width > 0 {
+            setAnchor(center: CGPoint(x: bounds.width / 2, y: bounds.height * 0.20), in: bounds)
+        } else {
+            relayout()
+        }
+    }
+
+    // MARK: 命中区域
+    //
+    // window 只在 bar 的矩形内吃触摸，其余全部放行。贴边隐藏时故意把可见条
+    // 也算进去（虽然收在屏幕外，但露出那 7pt 把手必须可点）。
+
+    func syncHitRegion() {
+        guard let window else { return }
+        var regions: [CGRect] = []
+        if store.isVisible {
+            let f = barFrame
+            // 贴边隐藏时把区域往下延伸到整个屏幕边，避免只有 7pt 宽点不中
+            if layout.peekSide == .left {
+                regions.append(CGRect(x: 0, y: f.minY, width: max(f.maxX, edgePeek + 8), height: f.height))
+            } else if layout.peekSide == .right {
+                let x = min(f.minX, window.bounds.width - edgePeek - 8)
+                regions.append(CGRect(x: x, y: f.minY, width: window.bounds.width - x, height: f.height))
+            } else {
+                regions.append(f)
+            }
+        }
+        window.interactiveRegions = regions
+    }
+
+    /// 面板展开/收起时切整屏交互
+    func setPanelPresented(_ presented: Bool) {
+        window?.fullScreenInteractive = presented
+    }
+
+    /// SwiftUI 侧测到真实尺寸后回报
+    func reportBarSize(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        guard abs(size.width - barSize.width) > 0.5 || abs(size.height - barSize.height) > 0.5 else { return }
+        barSize = size
+        relayout()
+        syncHitRegion()
+    }
+}
+
+// MARK: - 工具
+
+extension CGFloat {
+    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    }
+}
