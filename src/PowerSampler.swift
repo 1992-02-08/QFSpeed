@@ -88,7 +88,9 @@ enum PowerSampler {
         // （CFStringCreateWithCString 在纯 Swift 环境里拿不到 kCFStringEncodingUTF8，
         //  而且要自己管 +1/-1，容易泄漏）。这里只调一次，全部走 Swift 字典。
         var props: UnsafeMutableRawPointer?
-        let kr = createProps(svc, &props, kCFAllocatorDefault, 0)
+        // kCFAllocatorDefault 在 Swift 里是带类型的 CFAllocator?，
+        // 而 @convention(c) 签名要裸指针，必须显式转一下。
+        let kr = createProps(svc, &props, kCFAllocatorDefault.map { UnsafeRawPointer($0) }, 0)
         guard kr == KERN_SUCCESS, let props else { return out }
 
         // IORegistryEntryCreateCFProperties 把字典写进 out 参数，+1 引用
