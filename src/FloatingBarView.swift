@@ -42,11 +42,11 @@ struct FloatingBarView: View {
     private func item(_ kind: MetricKind) -> some View {
         HStack(spacing: fontSize * 0.22) {
             if useIcon {
-                Image(systemName: kind.icon)
+                Image(systemName: iconName(for: kind))
                     .font(.system(size: fontSize * 0.95, weight: .semibold))
                     .foregroundStyle(kind.tint)
             } else if !kind.shortLabel.isEmpty {
-                // CPU 在截图里不写标签，只显示百分比
+                // CPU / 电池不写标签：CPU 只显示百分比，电池只要图标（shortLabel 为空自然跳过）
                 Text(kind.shortLabel)
                     .font(.system(size: fontSize * 0.90, weight: .medium, design: .rounded))
                     .foregroundStyle(kind.tint.opacity(0.95))
@@ -56,6 +56,19 @@ struct FloatingBarView: View {
                 .font(.system(size: fontSize, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Color.white)
                 .monospacedDigit()
+        }
+    }
+
+    /// 电池图标跟着电量走（battery.0 / .25 / .50 / .75 / .100 都是 iOS 13+ 符号），
+    /// 其余指标用 MetricKind 里的固定符号。
+    private func iconName(for kind: MetricKind) -> String {
+        guard kind == .battery, let level = snapshot.battery else { return kind.icon }
+        switch level {
+        case ..<0.13:  return "battery.0"
+        case ..<0.38:  return "battery.25"
+        case ..<0.63:  return "battery.50"
+        case ..<0.88:  return "battery.75"
+        default:       return "battery.100"
         }
     }
 
@@ -84,6 +97,7 @@ struct FloatingBarView: View {
         case .fps:         return String(format: "%.0f", v)
         case .upload, .download: return Self.byteRate(v)
         case .battery:     return String(format: "%.0f%%", v * 100)
+        case .voltage:     return String(format: "%.2f", v / 1000.0)  // mV → V
         case .current:     return String(format: "%.0f", v)
         case .watt:        return String(format: "%.1f", v)
         case .temperature: return String(format: "%.0f", v)
