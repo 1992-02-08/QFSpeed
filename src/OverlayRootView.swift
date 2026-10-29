@@ -41,8 +41,13 @@ struct OverlayRootView: View {
                             x: layout.barCenter.x + dragTranslation.width,
                             y: layout.barCenter.y + dragTranslation.height
                         )
-                        .gesture(dragGesture)
-                        .onTapGesture { handleTap() }
+                        // 不能用 .gesture(drag) + .onTapGesture：
+                        // .gesture 的优先级高于 onTapGesture，DragGesture 会把点击吞掉，
+                        // 表现为"点了没反应，面板打不开"。必须用 simultaneousGesture。
+                        .simultaneousGesture(dragGesture)
+                        .simultaneousGesture(
+                            TapGesture().onEnded { handleTap() }
+                        )
                 }
 
                 if showPanel {
@@ -136,6 +141,7 @@ struct OverlayRootView: View {
                 // 第一帧：若处于贴边隐藏，先召回（接下来整段拖动都是正常位置拖动）
                 if !isDragging {
                     isDragging = true
+                    manager.setDragging(true)
                     if layout.peekSide != .none {
                         manager.unpeek()
                     }
@@ -147,6 +153,7 @@ struct OverlayRootView: View {
             .onEnded { value in
                 guard isDragging else { return }
                 isDragging = false
+                manager.setDragging(false)
 
                 // 把「当前显示位置 + 位移」换算成新的中心点，交给 manager 归一化
                 let target = CGPoint(
