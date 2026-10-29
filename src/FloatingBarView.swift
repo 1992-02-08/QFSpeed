@@ -97,10 +97,11 @@ struct FloatingBarView: View {
         case .fps:         return String(format: "%.0f", v)
         case .upload, .download: return Self.byteRate(v)
         case .battery:     return String(format: "%.0f%%", v * 100)
-        case .voltage:     return String(format: "%.2f", v / 1000.0)  // mV → V
-        case .current:     return String(format: "%.0f", v)
-        case .watt:        return String(format: "%.1f", v)
-        case .temperature: return String(format: "%.0f", v)
+        // 单位跟着数值走，和截图一致：3.72V / 233mA / 0.9W / 37.5
+        case .voltage:     return String(format: "%.2fV", v / 1000.0)   // mV → V
+        case .current:     return String(format: "%.0fmA", v)
+        case .watt:        return String(format: "%.1fW", v)
+        case .temperature: return String(format: "%.1f", v)
         }
     }
 
