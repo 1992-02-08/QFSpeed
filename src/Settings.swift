@@ -6,7 +6,7 @@ import Combine
 
 /// 悬浮条上可显示的 8 项指标。rawValue 用作 @AppStorage 的 key 后缀。
 enum MetricKind: String, CaseIterable, Identifiable, Codable {
-    case cpu, fps, upload, download, battery, current, watt, temperature
+    case cpu, fps, upload, download, battery, voltage, current, watt, temperature
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum MetricKind: String, CaseIterable, Identifiable, Codable {
         case .upload:      return "上传速度"
         case .download:    return "下载速度"
         case .battery:     return "电池电量"
+        case .voltage:     return "电压"
         case .current:     return "电流"
         case .watt:        return "瓦数"
         case .temperature: return "温度"
@@ -31,7 +32,8 @@ enum MetricKind: String, CaseIterable, Identifiable, Codable {
         case .fps:         return "FPS"
         case .upload:      return "↑"
         case .download:    return "↓"
-        case .battery:     return "电池"
+        case .battery:     return ""     // 只要图标，不要文字
+        case .voltage:     return "V"
         case .current:     return "mA"
         case .watt:        return "W"
         case .temperature: return "°C"
@@ -45,6 +47,7 @@ enum MetricKind: String, CaseIterable, Identifiable, Codable {
         case .upload:      return "arrow.up.circle.fill"
         case .download:    return "arrow.down.circle.fill"
         case .battery:     return "battery.75"
+        case .voltage:     return "minus.plus.batteryblock.fill"  // iOS 14+
         case .current:     return "bolt.horizontal.fill"
         case .watt:        return "bolt.fill"
         case .temperature: return "thermometer.medium"
@@ -59,6 +62,7 @@ enum MetricKind: String, CaseIterable, Identifiable, Codable {
         case .upload:      return Color(red: 0.28, green: 0.85, blue: 0.70)  // #428770 绿
         case .download:    return Color(red: 0.36, green: 0.72, blue: 0.98)  // 蓝
         case .battery:     return Color(red: 0.98, green: 0.75, blue: 0.30)  // #957942 琥珀
+        case .voltage:     return Color(red: 0.55, green: 0.85, blue: 0.98)  // 浅青，和电流分开
         case .current:     return Color(red: 0.98, green: 0.55, blue: 0.75)  // #985A7D 品红
         case .watt:        return Color(red: 0.98, green: 0.45, blue: 0.45)  // #924E5A 正红
         case .temperature: return Color(red: 0.98, green: 0.60, blue: 0.32)  // #7C4F35 橙棕
@@ -127,7 +131,7 @@ final class SettingsStore: ObservableObject {
     @Published var scale: CGFloat = 0.92 {
         didSet { defaults.set(Double(scale), forKey: "scale") }
     }
-    @Published var useIcon: Bool = false {
+    @Published var useIcon: Bool = true {    // 默认用图标（电池/电压/电流/温度都带符号）
         didSet { defaults.set(useIcon, forKey: "useIcon") }
     }
     @Published var backgroundOpacity: CGFloat = 0.55 {
@@ -183,7 +187,8 @@ final class SettingsStore: ObservableObject {
 
         self.fontSize = (d.object(forKey: "fontSize") as? Double).map { CGFloat($0) } ?? 12
         self.scale    = (d.object(forKey: "scale") as? Double).map { CGFloat($0) } ?? 0.92
-        self.useIcon  = d.bool(forKey: "useIcon")
+        // 用户没存过时默认 true；存过就尊重用户选择
+        self.useIcon  = d.object(forKey: "useIcon") as? Bool ?? true
         self.backgroundOpacity = (d.object(forKey: "backgroundOpacity") as? Double).map { CGFloat($0) } ?? 0.55
         self.isLocked = d.bool(forKey: "isLocked")
         self.edgeAutoHide = d.bool(forKey: "edgeAutoHide")
