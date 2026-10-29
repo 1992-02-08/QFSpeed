@@ -181,10 +181,10 @@ final class SettingsStore: ObservableObject {
             self.order = MetricKind.allCases
         }
 
-        self.fontSize = (d.object(forKey: "fontSize") as? Double).map(CGFloat.init) ?? 12
-        self.scale    = (d.object(forKey: "scale") as? Double).map(CGFloat.init) ?? 0.92
+        self.fontSize = (d.object(forKey: "fontSize") as? Double).map { CGFloat($0) } ?? 12
+        self.scale    = (d.object(forKey: "scale") as? Double).map { CGFloat($0) } ?? 0.92
         self.useIcon  = d.bool(forKey: "useIcon")
-        self.backgroundOpacity = (d.object(forKey: "backgroundOpacity") as? Double).map(CGFloat.init) ?? 0.55
+        self.backgroundOpacity = (d.object(forKey: "backgroundOpacity") as? Double).map { CGFloat($0) } ?? 0.55
         self.isLocked = d.bool(forKey: "isLocked")
         self.edgeAutoHide = d.bool(forKey: "edgeAutoHide")
         self.isVisible = d.object(forKey: "isVisible") as? Bool ?? true

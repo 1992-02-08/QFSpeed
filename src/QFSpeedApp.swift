@@ -52,11 +52,11 @@ struct DemoHostView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("QFSpeed")
                         .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.white)
 
                     Text("悬浮性能条 · 独立 App 宿主")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(Color.white.opacity(0.5))
 
                     statusCard
                     controlsCard
@@ -73,7 +73,7 @@ struct DemoHostView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("状态", systemImage: "waveform.path.ecg")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(Color.white.opacity(0.5))
 
             row("悬浮窗", store.isVisible ? "显示中" : "已隐藏", 
                 color: store.isVisible ? .green : .gray)
@@ -101,7 +101,7 @@ struct DemoHostView: View {
                     .frame(height: 46)
                     .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .fill(Color(red: 0.30, green: 0.62, blue: 0.95)))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.white)
             }
             .buttonStyle(.plain)
 
@@ -114,7 +114,7 @@ struct DemoHostView: View {
                     .frame(height: 46)
                     .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .fill(Color.white.opacity(0.09)))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(Color.white.opacity(0.9))
             }
             .buttonStyle(.plain)
         }
@@ -124,7 +124,7 @@ struct DemoHostView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("调试提示")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(Color.white.opacity(0.5))
 
             bullet("轻点悬浮条 → 上下文菜单（设定面板 / 锁定 / 重置 / 隐藏）")
             bullet("拖动悬浮条 → 移动位置，松手自动吸附屏幕边缘")
@@ -140,7 +140,7 @@ struct DemoHostView: View {
 
     private func row(_ key: String, _ value: String, color: Color) -> some View {
         HStack {
-            Text(key).font(.system(size: 14)).foregroundStyle(.white.opacity(0.6))
+            Text(key).font(.system(size: 14)).foregroundStyle(Color.white.opacity(0.6))
             Spacer()
             Text(value).font(.system(size: 14, weight: .semibold, design: .monospaced))
                 .foregroundStyle(color)
@@ -150,7 +150,7 @@ struct DemoHostView: View {
     private func bullet(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 7) {
             Circle().fill(Color.white.opacity(0.25)).frame(width: 4, height: 4).padding(.top, 7)
-            Text(text).font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.55))
+            Text(text).font(.system(size: 12.5)).foregroundStyle(Color.white.opacity(0.55))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

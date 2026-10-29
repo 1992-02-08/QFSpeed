@@ -18,7 +18,7 @@ BUILD="$ROOT/build"
 OUT_IPA="${1:-$ROOT/QFSpeed.ipa}"
 
 SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
-MIN_IOS="14.0"
+MIN_IOS="16.4"
 
 echo ">> SDK     : $SDK_PATH"
 echo ">> swiftc  : $(xcrun --find swiftc)"

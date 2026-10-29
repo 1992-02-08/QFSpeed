@@ -48,11 +48,11 @@ struct SettingsPanelView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("QFSpeed")
                 .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.white)
 
             Text("网速 · 性能 · 电量")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(Color.white.opacity(0.55))
 
             HStack(spacing: 6) {
                 Image(systemName: "window.ceiling")
@@ -64,7 +64,7 @@ struct SettingsPanelView: View {
                     .background(Capsule().fill(Color.white.opacity(0.10)))
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.38))
+            .foregroundStyle(Color.white.opacity(0.38))
             .padding(.top, 3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -78,10 +78,11 @@ struct SettingsPanelView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            // tracking 是 Text 专有的，必须先于任何返回 some View 的修饰符
             Text(title)
                 .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.42))
                 .tracking(0.6)
+                .foregroundStyle(Color.white.opacity(0.42))
 
             content()
         }
@@ -168,7 +169,7 @@ struct SettingsPanelView: View {
             HStack {
                 Text("显示图标")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(Color.white.opacity(0.85))
                 Spacer()
                 Toggle("", isOn: Binding(
                     get: { store.useIcon },
@@ -204,11 +205,11 @@ struct SettingsPanelView: View {
             HStack {
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(Color.white.opacity(0.85))
                 Spacer()
                 Text(valueText)
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(Color.white.opacity(0.55))
             }
             Slider(value: value, in: range, step: step)
                 .tint(Color(red: 0.36, green: 0.72, blue: 0.98))
@@ -241,7 +242,7 @@ struct SettingsPanelView: View {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .fill(Color.white.opacity(0.10))
                             )
-                            .foregroundStyle(.white.opacity(0.9))
+                            .foregroundStyle(Color.white.opacity(0.9))
                     }
                     .buttonStyle(.plain)
 
@@ -258,7 +259,7 @@ struct SettingsPanelView: View {
             HStack(spacing: 8) {
                 Text("微调步长")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(Color.white.opacity(0.55))
                 Spacer()
                 Picker("微调步长", selection: $nudgeStep) {
                     Text("1pt").tag(NudgeStep.fine)
@@ -274,7 +275,7 @@ struct SettingsPanelView: View {
                  ? "位置已锁定 · 只能用微调按钮移动"
                  : "自由移动（直接拖动悬浮条）")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(Color.white.opacity(0.45))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
@@ -290,7 +291,7 @@ struct SettingsPanelView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.white.opacity(0.07))
                 )
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(Color.white.opacity(0.8))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
@@ -341,7 +342,7 @@ struct SettingsPanelView: View {
                         RoundedRectangle(cornerRadius: 13, style: .continuous)
                             .fill(Color.white.opacity(0.11))
                     )
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.white)
             }
             .buttonStyle(.plain)
             .padding(.top, 3)
@@ -385,7 +386,7 @@ struct SettingsPanelView: View {
     private var footnote: some View {
         Text("「锁定位置」开启后悬浮条无法拖动，只能靠定位按钮 / 微调移动；关闭则可在任意位置自由拖动。")
             .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.32))
+            .foregroundStyle(Color.white.opacity(0.32))
             .lineSpacing(2)
             .fixedSize(horizontal: false, vertical: true)
     }

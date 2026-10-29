@@ -17,7 +17,7 @@ struct FloatingBarView: View {
             if metrics.isEmpty {
                 Text("无显示项")
                     .font(.system(size: fontSize * 0.9, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(Color.white.opacity(0.4))
             } else {
                 ForEach(metrics) { kind in
                     item(kind)
