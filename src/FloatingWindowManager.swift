@@ -34,6 +34,11 @@ final class PassThroughWindow: UIWindow {
     /// 面板展开时整屏都可交互（点空白处关闭）
     var fullScreenInteractive: Bool = false
 
+    /// 拖拽中：手指会离开起始矩形，若此时仍按 interactiveRegions 判定，
+    /// hitTest 会返回 nil 导致手势中断（表现为"拖一下就断"）。
+    /// 拖拽期间临时放行整屏，松手后立即收回。
+    var draggingPassthrough: Bool = false
+
     /// bounds 变化（首次布局 / 旋转 / 分屏）时回调
     var onLayout: (() -> Void)?
 
@@ -43,7 +48,7 @@ final class PassThroughWindow: UIWindow {
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        if fullScreenInteractive {
+        if fullScreenInteractive || draggingPassthrough {
             return super.hitTest(point, with: event)
         }
         // 留 6pt 余量，手指按在边缘也能抓住
@@ -316,6 +321,13 @@ final class FloatingWindowManager {
     //
     // window 只在 bar 的矩形内吃触摸，其余全部放行。贴边隐藏时故意把可见条
     // 也算进去（虽然收在屏幕外，但露出那 7pt 把手必须可点）。
+
+    /// 拖拽期间整屏放行触摸，松手后恢复按条子矩形判定。
+    /// 不这么做的话，手指一离开起始矩形 hitTest 就返回 nil，手感是"拖一下就断"。
+    func setDragging(_ dragging: Bool) {
+        (window as? PassThroughWindow)?.draggingPassthrough = dragging
+        if !dragging { syncHitRegion() }
+    }
 
     func syncHitRegion() {
         guard let window else { return }
