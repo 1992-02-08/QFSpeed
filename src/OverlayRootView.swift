@@ -56,20 +56,20 @@ struct OverlayRootView: View {
                 }
                 manager.relayout()
             }
-            .onChange(of: store.anchor) { _, _ in manager.relayout() }
-            .onChange(of: store.edgeAutoHide) { _, _ in
+            .onChange(of: store.anchor) { _ in manager.relayout() }
+            .onChange(of: store.edgeAutoHide) { _ in
                 if !store.edgeAutoHide { manager.unpeek() }
             }
-            .onChange(of: layout.bounds) { _, _ in
+            .onChange(of: layout.bounds) { _ in
                 updateNaturalSize(naturalSize)
             }
-            .onChange(of: store.refreshInterval) { _, _ in
+            .onChange(of: store.refreshInterval) { _ in
                 provider.restartIfNeeded()
             }
-            .onChange(of: showPanel) { _, presented in
+            .onChange(of: showPanel) { presented in
                 manager.setPanelPresented(presented)
             }
-            .onChange(of: store.isVisible) { _, visible in
+            .onChange(of: store.isVisible) { visible in
                 manager.syncHitRegion()
                 if !visible { showPanel = false }
             }
@@ -92,10 +92,10 @@ struct OverlayRootView: View {
             GeometryReader { g in
                 Color.clear
                     .onAppear { updateNaturalSize(g.size) }
-                    .onChange(of: g.size) { _, new in updateNaturalSize(new) }
+                    .onChange(of: g.size) { new in updateNaturalSize(new) }
             }
         )
-        .onChange(of: store.scale) { _, _ in reportBarSize() }
+        .onChange(of: store.scale) { _ in reportBarSize() }
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: layout.barCenter)
         .animation(.spring(response: 0.3, dampingFraction: 0.9), value: store.scale)
     }
