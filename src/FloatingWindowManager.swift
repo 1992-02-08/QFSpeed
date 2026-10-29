@@ -103,6 +103,18 @@ final class FloatingWindowManager {
         // 注入到 SpringBoard 时，dylib 加载早于窗口系统就绪，
         // 直接 return 会永远看不见。所以这里挂一次延迟重试。
         guard let scene = activeScene() else {
+            // 注入 SpringBoard 时，SpringBoard 的 windowScene 往往在极早期拿不到，
+            // 甚至永远拿不到（它不是普通 App）。这种情况下退而用
+            // UIWindow(frame:) 直接建窗 —— 它不需要 scene，照样能显示。
+            if SpringBoardWindowHost.shared.wasInjected {
+                if window == nil { buildWindowWithoutScene() }
+                window?.isHidden = false
+                store.isVisible = true
+                provider.start()
+                relayout()
+                syncHitRegion()
+                return
+            }
             scheduleRetry()
             return
         }
@@ -157,6 +169,40 @@ final class FloatingWindowManager {
         return scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
     }
 
+    /// 不依赖 UIWindowScene 的建窗路径，专供 SpringBoard 注入使用。
+    /// 注入到 SpringBoard 时 connectedScenes 可能为空，但 UIWindow 本身
+    /// 完全可以脱离 scene 工作（只是不会被 scene 生命周期管理）。
+    private func buildWindowWithoutScene() {
+        let screen = UIScreen.main.bounds
+        let w = PassThroughWindow(frame: screen)
+        w.windowLevel = UIWindow.Level.alert + 1
+        w.backgroundColor = .clear
+        w.isOpaque = false
+
+        let controller = OverlayHostController(store: store, provider: provider, layout: layout)
+        w.rootViewController = controller
+        w.isHidden = false
+        // 不要 makeKeyAndVisible：在 SpringBoard 进程里会把系统 key window
+        // 抢过来，可能导致状态栏/控制中心等系统 UI 行为异常。
+        // 只设 isHidden = false 就足够显示。
+
+        w.onLayout = { [weak self] in
+            guard let self else { return }
+            self.layout.bounds = w.bounds.size
+            self.relayout()
+            self.syncHitRegion()
+        }
+
+        let hosted = SpringBoardWindowHost.shared.host(w)
+        NSLog("[QFSpeed] 无 scene 建窗，SpringBoard 托管: \(hosted)")
+
+        host = controller
+        window = w
+        layout.bounds = w.bounds.size
+        relayout()
+        syncHitRegion()
+    }
+
     private func buildWindow(scene: UIWindowScene) {
         let w = PassThroughWindow(windowScene: scene)
 
@@ -173,7 +219,9 @@ final class FloatingWindowManager {
         let controller = OverlayHostController(store: store, provider: provider, layout: layout)
         w.rootViewController = controller
         w.isHidden = false
-        w.makeKeyAndVisible()
+        // 不要 makeKeyAndVisible：在 SpringBoard 进程里会把系统 key window
+        // 抢过来，可能导致状态栏/控制中心等系统 UI 行为异常。
+        // 只设 isHidden = false 就足够显示。
 
         w.onLayout = { [weak self] in
             guard let self else { return }
@@ -348,6 +396,14 @@ final class FloatingWindowManager {
     }
 
     /// 面板展开/收起时切整屏交互
+    /// 主界面「设置面板」按钮调用。
+    /// 悬浮窗没显示时先显示出来，否则面板没有宿主可以挂。
+    func openSettingsPanel() {
+        if window == nil || window?.isHidden == true { show() }
+        store.isVisible = true
+        store.panelRequestTick &+= 1
+    }
+
     func setPanelPresented(_ presented: Bool) {
         window?.fullScreenInteractive = presented
     }
