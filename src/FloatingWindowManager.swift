@@ -246,6 +246,9 @@ final class FloatingWindowManager {
     /// 把 anchor 归一化（0...1），越界自动夹紧
     func setAnchor(center: CGPoint, in bounds: CGSize) {
         guard bounds.width > 0, bounds.height > 0 else { return }
+        // bounds 为 0 时（窗口尚未布局完）除法会产生 nan/inf，
+        // 再进 clamped 会导致比较结果异常 → 位置算成 NaN → 视图层崩溃。
+        guard bounds.width > 1, bounds.height > 1 else { return }
         let nx = (center.x / bounds.width).clamped(to: 0...1)
         let ny = (center.y / bounds.height).clamped(to: 0...1)
         store.anchor = BarAnchor(x: nx, y: ny)
