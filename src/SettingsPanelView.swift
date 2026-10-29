@@ -113,11 +113,16 @@ struct SettingsPanelView: View {
     private var hostState: (icon: String, title: String, detail: String?, color: Color) {
         let h = SpringBoardWindowHost.shared
         if h.isHosted {
-            return ("checkmark.seal.fill", "SpringBoard 托管", "系统级",
+            // 托管成功后再探一次 remote 状态：只有 SpringBoard 真正接管渲染，
+            // 本 App 退出后才不会消失
+            let remote = SpringBoardWindowHost.shared.isRemoteActive
+            return ("checkmark.seal.fill",
+                    "SpringBoard 托管",
+                    remote ? "远程渲染 · 系统级" : "已托管（remote 未激活）",
                     Color(red: 0.42, green: 0.88, blue: 0.62))
         }
-        if h.wasInjected {
-            return ("exclamationmark.triangle.fill", "普通 UIWindow", "托管失败",
+        if let reason = h.failureReason {
+            return ("exclamationmark.triangle.fill", "托管失败", reason,
                     Color(red: 0.98, green: 0.72, blue: 0.30))
         }
         return ("window.ceiling", "普通 UIWindow", "仅本 App",
