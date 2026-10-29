@@ -1,6 +1,7 @@
 import Foundation
 import CoreFoundation
 import QuartzCore
+import Darwin
 
 /// 电池电流 / 电压 / 温度 / 瓦数。
 ///
@@ -23,13 +24,13 @@ enum PowerSampler {
 
     private typealias ServiceMatchingFn  = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
     private typealias GetMatchingFn      = @convention(c) (mach_port_t, UnsafeMutableRawPointer?) -> UInt32
-    private typealias CreatePropFn       = @convention(c) (UInt32, UnsafeRawPointer?, UnsafeMutableRawPointer?, UInt32) -> UnsafeMutableRawPointer?
+    private typealias CreatePropsFn      = @convention(c) (UInt32, UnsafeMutablePointer<UnsafeMutableRawPointer?>, UnsafeRawPointer?, UInt32) -> kern_return_t
     private typealias ReleaseFn          = @convention(c) (UInt32) -> kern_return_t
 
     private struct Symbols {
         var matching: ServiceMatchingFn?
         var getService: GetMatchingFn?
-        var createProp: CreatePropFn?
+        var createProps: CreatePropsFn?
         var release: ReleaseFn?
 
         init() {
@@ -41,7 +42,7 @@ enum PowerSampler {
             }
             matching   = sym("IOServiceMatching", ServiceMatchingFn.self)
             getService = sym("IOServiceGetMatchingService", GetMatchingFn.self)
-            createProp = sym("IORegistryEntryCreateCFProperty", CreatePropFn.self)
+            createProps = sym("IORegistryEntryCreateCFProperties", CreatePropsFn.self)
             release    = sym("IOObjectRelease", ReleaseFn.self)
         }
     }
@@ -70,7 +71,7 @@ enum PowerSampler {
         let s = symbols
         guard let matching = s.matching,
               let getService = s.getService,
-              let createProp = s.createProp,
+              let createProps = s.createProps,
               let release = s.release else { return out }
 
         // IOServiceMatching 返回 +1 的 CFMutableDictionary。
@@ -83,22 +84,19 @@ enum PowerSampler {
         guard svc != 0 else { return out }
         defer { _ = release(svc) }
 
-        let allocator = kCFAllocatorDefault
-        let utf8 = CFStringEncoding(kCFStringEncodingUTF8)
+        // 一次把整张属性表取出来，避免为每个键手工造 CFString
+        // （CFStringCreateWithCString 在纯 Swift 环境里拿不到 kCFStringEncodingUTF8，
+        //  而且要自己管 +1/-1，容易泄漏）。这里只调一次，全部走 Swift 字典。
+        var props: UnsafeMutableRawPointer?
+        let kr = createProps(svc, &props, kCFAllocatorDefault, 0)
+        guard kr == KERN_SUCCESS, let props else { return out }
 
-        func num(_ keyName: String) -> Double? {
-            let ptr = keyName.withCString { cstr -> UnsafeMutableRawPointer? in
-                // CFStringCreateWithCString 是 +1，用完必须 CFRelease，
-                // 否则每次采样泄漏一个 CFString（一秒两次 × 一直运行 = 可观）。
-                guard let key = CFStringCreateWithCString(allocator, cstr, utf8) else { return nil }
-                defer { CFRelease(key) }
-                return createProp(svc, Unmanaged.passUnretained(key).toOpaque(), allocator, 0)
-            }
-            guard let ptr else { return nil }
-            // IORegistryEntryCreateCFProperty 是 Copy 语义 → +1
-            let cfv = Unmanaged<CFTypeRef>.fromOpaque(ptr).takeRetainedValue()
-            guard CFGetTypeID(cfv) == CFNumberGetTypeID() else { return nil }
-            return (cfv as? NSNumber)?.doubleValue
+        // IORegistryEntryCreateCFProperties 把字典写进 out 参数，+1 引用
+        let cfDict = Unmanaged<CFDictionary>.fromOpaque(props).takeRetainedValue()
+        guard let attrs = cfDict as NSDictionary as? [String: Any] else { return out }
+
+        func num(_ key: String) -> Double? {
+            (attrs[key] as? NSNumber)?.doubleValue
         }
 
         // Amperage: 有符号，负=放电。界面上显示绝对值。
