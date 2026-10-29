@@ -47,27 +47,17 @@ enum MetricKind: String, CaseIterable, Identifiable, Codable {
         case .upload:      return "arrow.up.circle.fill"
         case .download:    return "arrow.down.circle.fill"
         case .battery:     return "battery.75"
-        case .voltage:     return "minus.plus.batteryblock.fill"  // iOS 14+
-        case .current:     return "bolt.horizontal.fill"
-        case .watt:        return "bolt.fill"
+        case .voltage:     return "gauge.medium"             // iOS 14+
+        case .current:     return "bolt.horizontal"
+        case .watt:        return "bolt"
         case .temperature: return "thermometer.medium"
         }
     }
 
-    /// 每项独立配色 —— 截图里是 8 项不同颜色，不是统一灰字
-    var tint: Color {
-        switch self {
-        case .cpu:         return Color(red: 0.31, green: 0.75, blue: 0.95)  // #4E7990 系青蓝提亮
-        case .fps:         return Color(red: 0.62, green: 0.50, blue: 0.98)  // #75699A 紫
-        case .upload:      return Color(red: 0.28, green: 0.85, blue: 0.70)  // #428770 绿
-        case .download:    return Color(red: 0.36, green: 0.72, blue: 0.98)  // 蓝
-        case .battery:     return Color(red: 0.98, green: 0.75, blue: 0.30)  // #957942 琥珀
-        case .voltage:     return Color(red: 0.55, green: 0.85, blue: 0.98)  // 浅青，和电流分开
-        case .current:     return Color(red: 0.98, green: 0.55, blue: 0.75)  // #985A7D 品红
-        case .watt:        return Color(red: 0.98, green: 0.45, blue: 0.45)  // #924E5A 正红
-        case .temperature: return Color(red: 0.98, green: 0.60, blue: 0.32)  // #7C4F35 橙棕
-        }
-    }
+    /// 统一单色 —— 截图里是白底深色细线图标，所有项同一个颜色，
+    /// 靠图形区分而不是靠色相。悬浮条本身是深色半透明底，
+    /// 所以用接近白的高亮度中性色保证对比度。
+    var tint: Color { Color.white.opacity(0.92) }
 
 }
 
@@ -150,6 +140,11 @@ final class SettingsStore: ObservableObject {
     @Published var edgeAutoHide: Bool = false {
         didSet { defaults.set(edgeAutoHide, forKey: "edgeAutoHide") }
     }
+    /// 外部请求打开设置面板的信号。
+    /// 用自增计数而不是 Bool：连续点两次按钮也要能重新打开，
+    /// Bool 从 true 再置 true 不会触发 onChange。
+    @Published var panelRequestTick: Int = 0
+
     @Published var isVisible: Bool = true {
         didSet { defaults.set(isVisible, forKey: "isVisible") }
     }
@@ -163,7 +158,7 @@ final class SettingsStore: ObservableObject {
         let d = SettingsStore.suiteName.flatMap { UserDefaults(suiteName: $0) } ?? .standard
         self.defaults = d
 
-        // 默认 8 项全开
+        // 默认全部显示
         var e: [MetricKind: Bool] = [:]
         for k in MetricKind.allCases { e[k] = true }
         if let raw = d.dictionary(forKey: "enabled") {
@@ -182,6 +177,7 @@ final class SettingsStore: ObservableObject {
             let missing = MetricKind.allCases.filter { !parsed.contains($0) }
             self.order = parsed + missing
         } else {
+            // 顺序：CPU / FPS / 上传 / 下载 / 电量 / 电压 / 电流 / 瓦 / 温度
             self.order = MetricKind.allCases
         }
 
