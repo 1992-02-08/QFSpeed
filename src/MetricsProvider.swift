@@ -12,6 +12,7 @@ struct MetricsSnapshot {
     var upload: Double? = nil       // bytes/s
     var download: Double? = nil     // bytes/s
     var battery: Double? = nil      // 0...1
+    var voltage: Double? = nil      // mV
     var current: Double? = nil      // mA，放/充都取绝对值
     var watt: Double? = nil         // W
     var temperature: Double? = nil  // °C
@@ -25,6 +26,7 @@ struct MetricsSnapshot {
         case .upload:      return upload
         case .download:    return download
         case .battery:     return battery
+        case .voltage:     return voltage
         case .current:     return current
         case .watt:        return watt
         case .temperature: return temperature
@@ -151,6 +153,7 @@ final class MetricsProvider {
         lastNet = (net.up, net.down, now)
 
         let power = readPower()
+        s.voltage = power.voltage
         s.current = power.current
         s.watt = power.watt
         s.temperature = power.temperature
@@ -241,9 +244,9 @@ final class MetricsProvider {
     // MARK: - 电流 / 瓦数 / 温度
 
     /// 全部走 PowerSampler（dlopen/dlsym），原因见该文件头注释。
-    private func readPower() -> (current: Double?, watt: Double?, temperature: Double?) {
+    private func readPower() -> (voltage: Double?, current: Double?, watt: Double?, temperature: Double?) {
         let r = PowerSampler.read()
-        return (r.current, r.watt, r.temperature)
+        return (r.voltage, r.current, r.watt, r.temperature)
     }
 }
 
