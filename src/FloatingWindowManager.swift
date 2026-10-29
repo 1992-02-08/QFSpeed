@@ -95,7 +95,12 @@ final class FloatingWindowManager {
     // MARK: 生命周期
 
     func show() {
-        guard let scene = activeScene() else { return }
+        // 注入到 SpringBoard 时，dylib 加载早于窗口系统就绪，
+        // 直接 return 会永远看不见。所以这里挂一次延迟重试。
+        guard let scene = activeScene() else {
+            scheduleRetry()
+            return
+        }
         if window == nil { buildWindow(scene: scene) }
         window?.isHidden = false
         store.isVisible = true
@@ -116,6 +121,26 @@ final class FloatingWindowManager {
         store.isVisible ? hide() : show()
     }
 
+    /// scene 未就绪时的重试（最多 ~5 秒）。
+    /// 独立 App 模式下第一次调用就能拿到 scene，这个方法基本不会走到。
+    private var retryCount = 0
+    private func scheduleRetry() {
+        guard retryCount < 25 else {
+            NSLog("[QFSpeed] scene 始终未就绪，放弃")
+            return
+        }
+        retryCount += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self else { return }
+            if self.activeScene() != nil {
+                self.retryCount = 0
+                self.show()
+            } else {
+                self.scheduleRetry()
+            }
+        }
+    }
+
     /// UIWindowScene 激活后补挂一次（注入模式下宿主可能迟迟不 active）
     func showIfActive() {
         guard window == nil, activeScene() != nil else { return }
@@ -129,15 +154,21 @@ final class FloatingWindowManager {
 
     private func buildWindow(scene: UIWindowScene) {
         let w = PassThroughWindow(windowScene: scene)
-        // Alert+1 能压住宿主的弹窗与键盘，又不会盖住系统权限框。
-        // 盖过权限框 = 用户点不到「允许」，等于自己把 App 弄死。
-        w.windowLevel = .alert + 1
+
+        // 层级选择：
+        //  - 有了 platform-application + 越权签名时，用 `.statusBar + 1` 能压在
+        //    绝大多数系统 UI 之上；但如果盖住 SpringBoard 的权限弹窗，
+        //    用户点不到「允许」就会把自己锁死，所以上限卡在 alert。
+        //  - 普通签名（自签/TrollStore 未越权）时只能 `.alert + 1`，
+        //    超过这个层级系统直接不理你。
+        w.windowLevel = UIWindow.Level.alert + 1
         w.backgroundColor = .clear
         w.isOpaque = false
 
         let controller = OverlayHostController(store: store, provider: provider, layout: layout)
         w.rootViewController = controller
         w.isHidden = false
+        w.makeKeyAndVisible()
 
         w.onLayout = { [weak self] in
             guard let self else { return }
@@ -145,6 +176,13 @@ final class FloatingWindowManager {
             self.relayout()
             self.syncHitRegion()
         }
+
+        // 关键：尝试把窗口托管给 SpringBoard。
+        // 成功 → 本 App 进后台 / 用户切到别的 App，浮窗照样显示（系统级）。
+        // 失败 → 保持普通 UIWindow，只在本 App 内可见。
+        // 无论成败都不影响功能，只是可见范围不同，所以不阻断流程。
+        let hosted = SpringBoardWindowHost.shared.host(w)
+        NSLog("[QFSpeed] SpringBoard 托管: \(hosted ? "成功（系统级）" : "失败（仅本 App）")")
 
         host = controller
         window = w

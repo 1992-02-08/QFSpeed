@@ -38,11 +38,34 @@ jobs:
 
       - name: Inspect
         run: |
+          set +e
+          echo "=== IPA ==="
           ls -lh QFSpeed.ipa
-          unzip -l QFSpeed.ipa | head -30
+          unzip -l QFSpeed.ipa
+
+          echo "=== dylib ==="
+          ls -lh QFSpeedOverlay.dylib 2>/dev/null || echo "!! dylib 未产出"
+
+          echo "=== 二进制架构 ==="
+          lipo -info Payload/*.app/QFSpeed 2>/dev/null || true
+
+          echo "=== 确认 constructor 进 dylib 了 ==="
+          nm -U QFSpeedOverlay.dylib 2>/dev/null | grep -i ctor || echo "(ctor 符号检查跳过)"
+
+          echo "=== entitlements ==="
+          codesign -d --entitlements - Payload/*.app/QFSpeed 2>&1 | head -20
+
+      - name: Package both
+        run: |
+          # 把 dylib 一并塞进 zip，方便一次下载
+          mkdir -p dist
+          cp QFSpeed.ipa dist/ 2>/dev/null || true
+          cp QFSpeedOverlay.dylib dist/ 2>/dev/null || true
+          ls -lh dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: QFSpeed-ipa
-          path: QFSpeed.ipa
+          name: QFSpeed-bundle
+          path: dist/
           retention-days: 30
+          if-no-files-found: error

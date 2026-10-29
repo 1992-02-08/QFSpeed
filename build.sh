@@ -71,6 +71,59 @@ xcrun -sdk iphoneos swiftc \
 echo ">> linked:"
 file "$BUILD/$APP_NAME"
 
+# ---------------------------------------------------------------- 注入用 dylib
+# TrollFools 用：把这个 dylib 注入 SpringBoard 后，浮窗就是系统级的。
+# 与 App 二进制的区别：去掉 @main 入口（带 main 的是可执行文件，不能当 dylib），
+# 改用 constructor 自动启动。
+DYLIB_SOURCES=()
+for f in "$ROOT"/src/*.swift; do
+  case "$f" in
+    */QFSpeedApp.swift) continue ;;   # 含 @main，必须排除
+    *) DYLIB_SOURCES+=("$f") ;;
+  esac
+done
+
+echo ">> 构建 dylib（${#DYLIB_SOURCES[@]} 个源文件，已排除 @main）"
+
+# C constructor 单独编成 .o —— swiftc 不会主动编译随行的 .c，
+# 必须自己先产出目标文件再交给链接器。
+xcrun -sdk iphoneos clang -c \
+  -target arm64-apple-ios${MIN_IOS} \
+  -isysroot "$SDK_PATH" \
+  -O2 \
+  "$ROOT/src/ctor.c" \
+  -o "$BUILD/ctor.o"
+echo ">> ctor.o OK"
+xcrun -sdk iphoneos swiftc \
+  -target arm64-apple-ios${MIN_IOS} \
+  -sdk "$SDK_PATH" \
+  -O \
+  -parse-as-library \
+  -emit-library \
+  -install_name QFSpeedOverlay.dylib \
+  -F "$BUILD/FW" \
+  -framework BackBoardServices \
+  -framework GraphicsServices \
+  -framework SpringBoardServices \
+  -framework AssertionServices \
+  -framework IOKit \
+  -framework UIKit \
+  -framework Foundation \
+  -framework CoreGraphics \
+  -framework QuartzCore \
+  -framework CoreFoundation \
+  "$BUILD/ctor.o" \
+  "${DYLIB_SOURCES[@]}" \
+  -o "$BUILD/QFSpeedOverlay.dylib"
+
+if [ -f "$BUILD/QFSpeedOverlay.dylib" ]; then
+  echo ">> dylib OK: $(ls -lh "$BUILD/QFSpeedOverlay.dylib" | awk '{print $5}')"
+  if command -v ldid >/dev/null 2>&1; then
+    ldid -S"$ROOT/ent.plist" "$BUILD/QFSpeedOverlay.dylib"
+  fi
+  cp "$BUILD/QFSpeedOverlay.dylib" "$(dirname "$OUT_IPA")/QFSpeedOverlay.dylib"
+fi
+
 # ---------------------------------------------------------------- 打包 .app
 APP_DIR="$BUILD/Payload/$APP_NAME.app"
 mkdir -p "$APP_DIR"
