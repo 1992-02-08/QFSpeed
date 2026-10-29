@@ -179,6 +179,11 @@ final class FloatingWindowManager {
         w.backgroundColor = .clear
         w.isOpaque = false
 
+        // ⚠️ 顺序关键：secure context 必须在窗口上屏之前标记，
+        // 否则 CAContext 已经按非 secure 建好，再设也没用。
+        // TrollSpeed 就是先设这个再托管。
+        SpringBoardWindowHost.shared.markSecure(w)
+
         let controller = OverlayHostController(store: store, provider: provider, layout: layout)
         w.rootViewController = controller
         w.isHidden = false
