@@ -35,6 +35,21 @@ final class SpringBoardWindowHost {
 
     func markInjected() { wasInjected = true }
 
+    /// 托管是否真的进入「远程渲染」状态。
+    ///
+    /// 这是「本 App 退出后条子还在不在」的分水岭：
+    /// `_isRemoteHUDActive` 为 true 表示界面已经交给 SpringBoard 侧渲染，
+    /// 我们这边的窗口只是个壳，进程没了也不影响显示。
+    var isRemoteActive: Bool {
+        let sel = NSSelectorFromString("_isRemoteHUDActive")
+        guard let w = hostedWindow, w.responds(to: sel) else { return false }
+        typealias Fn = @convention(c) (AnyObject, Selector) -> Bool
+        let fn = unsafeBitCast(w.method(for: sel), to: Fn.self)
+        return fn(w, sel)
+    }
+
+    private weak var hostedWindow: UIWindow?
+
     // MARK: - 取窗口真实 contextId
 
     private func contextID(of window: UIWindow) -> UInt32? {
@@ -106,6 +121,7 @@ final class SpringBoardWindowHost {
             fn(controller, selWithLevel, cid, hostLevel)
 
             hosting = controller
+            hostedWindow = window
             contextID = cid
             isHosted = true
             failureReason = nil
@@ -121,6 +137,7 @@ final class SpringBoardWindowHost {
             fn(controller, selPlain, cid)
 
             hosting = controller
+            hostedWindow = window
             contextID = cid
             isHosted = true
             failureReason = nil
