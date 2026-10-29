@@ -100,7 +100,7 @@ xcrun -sdk iphoneos swiftc \
   -O \
   -parse-as-library \
   -emit-library \
-  -install_name QFSpeedOverlay.dylib \
+  -Xlinker -install_name -Xlinker /usr/lib/QFSpeedOverlay.dylib \
   -F "$BUILD/FW" \
   -framework BackBoardServices \
   -framework GraphicsServices \
