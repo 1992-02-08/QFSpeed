@@ -71,6 +71,10 @@ struct OverlayRootView: View {
             .onChange(of: store.refreshInterval) { _ in
                 provider.restartIfNeeded()
             }
+            // 外部（主界面按钮）请求打开面板
+            .onChange(of: store.panelRequestTick) { _ in
+                withAnimation(.easeOut(duration: 0.20)) { showPanel = true }
+            }
             .onChange(of: showPanel) { presented in
                 manager.setPanelPresented(presented)
             }
