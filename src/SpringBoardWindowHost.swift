@@ -30,9 +30,12 @@ final class SpringBoardWindowHost {
     private func contextID(of window: UIWindow) -> UInt32? {
         let sel = NSSelectorFromString("_contextId")
         guard window.responds(to: sel) else { return nil }
-        typealias Fn = @convention(c) (AnyObject, Selector) -> UInt32
+        // 不同系统版本 _contextId 的返回类型不同（unsigned int / unsigned long），
+        // 按 UInt 取（64 位寄存器）再把低 32 位截出来，两种都对。
+        typealias Fn = @convention(c) (AnyObject, Selector) -> UInt
         let fn = unsafeBitCast(window.method(for: sel), to: Fn.self)
-        let cid = fn(window, sel)
+        let raw = fn(window, sel)
+        let cid = UInt32(truncatingIfNeeded: raw)
         return cid == 0 ? nil : cid
     }
 
