@@ -54,17 +54,22 @@ struct SettingsPanelView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.55))
 
+            // 真实挂载状态：托管成功才是系统级（退出 App 也在），
+            // 失败则是普通 UIWindow（只在本 App 内可见）。
+            // 之前这个位置写死 "lv=0"，看不出到底有没有生效。
             HStack(spacing: 6) {
-                Image(systemName: "window.ceiling")
+                Image(systemName: hostState.icon)
                     .font(.system(size: 10, weight: .semibold))
-                Text("挂载 host UIWindow")
-                Text("lv=0")
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Color.white.opacity(0.10)))
+                Text(hostState.title)
+                if let extra = hostState.detail {
+                    Text(extra)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.white.opacity(0.10)))
+                }
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-            .foregroundStyle(Color.white.opacity(0.38))
+            .foregroundStyle(hostState.color)
             .padding(.top, 3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,6 +108,20 @@ struct SettingsPanelView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 4)
         .background(rowBackground)
+    }
+
+    private var hostState: (icon: String, title: String, detail: String?, color: Color) {
+        let h = SpringBoardWindowHost.shared
+        if h.isHosted {
+            return ("checkmark.seal.fill", "SpringBoard 托管", "系统级",
+                    Color(red: 0.42, green: 0.88, blue: 0.62))
+        }
+        if h.wasInjected {
+            return ("exclamationmark.triangle.fill", "普通 UIWindow", "托管失败",
+                    Color(red: 0.98, green: 0.72, blue: 0.30))
+        }
+        return ("window.ceiling", "普通 UIWindow", "仅本 App",
+                Color.white.opacity(0.38))
     }
 
     private func metricRow(_ kind: MetricKind) -> some View {
