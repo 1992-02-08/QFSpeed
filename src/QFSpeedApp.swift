@@ -106,6 +106,21 @@ struct DemoHostView: View {
             .buttonStyle(.plain)
 
             Button {
+                // 主界面直接打开设置面板。
+                // 之前只能在悬浮条上轻点调出上下文菜单，悬浮条没显示或
+                // 点击被手势吞掉时就没有任何入口 —— 这个按钮是硬保险。
+                FloatingWindowManager.shared.openSettingsPanel()
+            } label: {
+                Label("设置面板", systemImage: "slider.horizontal.3")
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.white.opacity(0.09)))
+                    .foregroundStyle(Color.white.opacity(0.9))
+            }
+            .buttonStyle(.plain)
+
+            Button {
                 store.isLocked.toggle()
             } label: {
                 Label(store.isLocked ? "解锁位置" : "锁定位置",
