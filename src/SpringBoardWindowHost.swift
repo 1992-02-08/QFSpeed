@@ -23,6 +23,9 @@ final class SpringBoardWindowHost {
     private(set) var isHosted = false
     private(set) var wasInjected = false
 
+    /// 失败原因，面板里直接显示出来 —— 否则用户只能猜"为什么没生效"
+    private(set) var failureReason: String?
+
     func markInjected() { wasInjected = true }
 
     /// 取 UIWindow 的私有 `_contextId`（SpringBoard 认的就是这个值）。
@@ -45,11 +48,13 @@ final class SpringBoardWindowHost {
         guard !isHosted else { return true }
 
         guard let cid = contextID(of: window) else {
+            failureReason = "取不到 _contextId"
             NSLog("[QFSpeed] 取不到 _contextId，降级为普通窗口")
             return false
         }
 
         guard let cls = NSClassFromString("SBSAccessibilityWindowHostingController") as? NSObject.Type else {
+            failureReason = "无 HostingController 类"
             NSLog("[QFSpeed] SBSAccessibilityWindowHostingController 不存在，降级")
             return false
         }
@@ -57,6 +62,7 @@ final class SpringBoardWindowHost {
         let controller = cls.init()
         let sel = NSSelectorFromString("registerWindowWithContextID:")
         guard controller.responds(to: sel) else {
+            failureReason = "无 register 方法"
             NSLog("[QFSpeed] registerWindowWithContextID: 不可用，降级")
             return false
         }
@@ -69,6 +75,7 @@ final class SpringBoardWindowHost {
         hosting = controller
         contextID = cid
         isHosted = true
+        failureReason = nil
         NSLog("[QFSpeed] 已托管给 SpringBoard, contextID=\(cid)")
         return true
     }
