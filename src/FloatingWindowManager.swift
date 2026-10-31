@@ -49,6 +49,9 @@ final class PassThroughWindow: UIWindow {
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         if fullScreenInteractive || draggingPassthrough {
+            // 拖拽 / 面板展开时，把触摸稳定交给根视图，保证 SwiftUI 手势不被中断：
+            // 手指移出浮条矩形后若仍走 super.hitTest，空白区可能返回 nil 使手势掉链子（"拖一下就断"）。
+            if let root = self.rootViewController?.view { return root }
             return super.hitTest(point, with: event)
         }
         // 留 6pt 余量，手指按在边缘也能抓住
@@ -100,25 +103,16 @@ final class FloatingWindowManager {
     // MARK: 生命周期
 
     func show() {
-        // 注入到 SpringBoard 时，dylib 加载早于窗口系统就绪，
-        // 直接 return 会永远看不见。所以这里挂一次延迟重试。
-        guard let scene = activeScene() else {
-            // 注入 SpringBoard 时，SpringBoard 的 windowScene 往往在极早期拿不到，
-            // 甚至永远拿不到（它不是普通 App）。这种情况下退而用
-            // UIWindow(frame:) 直接建窗 —— 它不需要 scene，照样能显示。
-            if SpringBoardWindowHost.shared.wasInjected {
-                if window == nil { buildWindowWithoutScene() }
-                window?.isHidden = false
-                store.isVisible = true
-                provider.start()
-                relayout()
-                syncHitRegion()
-                return
-            }
+        // 常驻显示的核心：始终用「无 scene 窗口 + SpringBoard 托管」。
+        //  - 交给 SpringBoard 合成后，退后台 / 切 App / 锁屏都仍可见（系统级窗口）。
+        //  - 触摸走 App 自身的 UIApplication 事件循环，全屏可拖可点（全局拖动）。
+        // 思路对齐 2.1.6 的 -hud 子进程：不依赖 UIWindowScene，自建系统窗口交给 SpringBoard。
+        let screen = UIScreen.main.bounds
+        guard screen.width > 0 else {
             scheduleRetry()
             return
         }
-        if window == nil { buildWindow(scene: scene) }
+        if window == nil { buildWindowWithoutScene() }
         window?.isHidden = false
         store.isVisible = true
         layout.peekSide = .none
@@ -138,29 +132,24 @@ final class FloatingWindowManager {
         store.isVisible ? hide() : show()
     }
 
-    /// scene 未就绪时的重试（最多 ~5 秒）。
-    /// 独立 App 模式下第一次调用就能拿到 scene，这个方法基本不会走到。
+    /// 屏幕尚未就绪时的重试（最多 ~5 秒）。
+    /// 无 scene 窗口只依赖 UIScreen，不需要 scene，所以只需等屏幕可用。
     private var retryCount = 0
     private func scheduleRetry() {
         guard retryCount < 25 else {
-            NSLog("[QFSpeed] scene 始终未就绪，放弃")
+            NSLog("[QFSpeed] 屏幕始终未就绪，放弃")
             return
         }
         retryCount += 1
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            guard let self else { return }
-            if self.activeScene() != nil {
-                self.retryCount = 0
-                self.show()
-            } else {
-                self.scheduleRetry()
-            }
+            self?.show()
         }
     }
 
-    /// UIWindowScene 激活后补挂一次（注入模式下宿主可能迟迟不 active）
+    /// UIWindowScene 激活后补挂一次（注入模式下宿主可能迟迟不 active）。
+    /// 无 scene 窗口不依赖 scene，这里只要窗口还没建就直接建。
     func showIfActive() {
-        guard window == nil, activeScene() != nil else { return }
+        guard window == nil else { return }
         show()
     }
 
@@ -220,6 +209,10 @@ final class FloatingWindowManager {
         w.windowLevel = UIWindow.Level.alert + 1
         w.backgroundColor = .clear
         w.isOpaque = false
+
+        // ⚠️ secure context 必须在窗口上屏之前标记，否则 CAContext 已按非 secure
+        // 建好，再设也没用（参考 2.1.6：先设 secure 再托管）。
+        SpringBoardWindowHost.shared.markSecure(w)
 
         let controller = OverlayHostController(store: store, provider: provider, layout: layout)
         w.rootViewController = controller
